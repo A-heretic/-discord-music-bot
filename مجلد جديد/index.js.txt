@@ -1,0 +1,100 @@
+const { Client, GatewayIntentBits } = require('discord.js');
+const { Player } = require('discord-player');
+const { YouTubeExtractor } = require('@discord-player/extractor');
+require('dotenv').config();
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.MessageContent
+    ]
+});
+
+const player = new Player(client);
+
+// تسجيل مستخرج يوتيوب
+player.extractors.register(YouTubeExtractor);
+
+client.on('ready', () => {
+    console.log(`تم تسجيل الدخول باسم ${client.user.tag}`);
+    console.log('البوت جاهز للاستخدام!');
+});
+
+client.on('messageCreate', async (message) => {
+    if (message.author.bot) return;
+    if (!message.content.startsWith('!')) return;
+
+    const command = message.content.slice(1).split(' ')[0];
+    const args = message.content.slice(1).split(' ').slice(1);
+
+    switch (command) {
+        case 'شغل':
+            if (!args[0]) return message.reply('الرجاء إدخال رابط الأغنية');
+            if (!message.member.voice.channel) return message.reply('يجب أن تكون في روم صوتي');
+            
+            try {
+                console.log('محاولة تشغيل الأغنية...');
+                const voiceChannel = message.member.voice.channel;
+                
+                // التحقق من صلاحيات البوت
+                const permissions = voiceChannel.permissionsFor(client.user);
+                if (!permissions.has('Connect') || !permissions.has('Speak')) {
+                    return message.reply('البوت لا يملك الصلاحيات المطلوبة للدخول والتحدث في الروم الصوتي');
+                }
+
+                console.log('دخول الروم الصوتي...');
+                await voiceChannel.join();
+
+                console.log('بدء تشغيل الأغنية...');
+                const { track } = await player.play(
+                    voiceChannel,
+                    args.join(' '),
+                    {
+                        member: message.member,
+                        textChannel: message.channel,
+                        message,
+                        nodeOptions: {
+                            leaveOnEmpty: true,
+                            leaveOnEnd: true,
+                            leaveOnStop: true,
+                            leaveOnError: true,
+                            bufferingTimeout: 0,
+                            connectionTimeout: 0
+                        }
+                    }
+                );
+                console.log('تم تشغيل الأغنية بنجاح');
+                message.reply(`جاري تشغيل: ${track.title}`);
+            } catch (e) {
+                console.error('حدث خطأ:', e);
+                message.reply('حدث خطأ أثناء تشغيل الأغنية');
+            }
+            break;
+
+        case 'ايقاف':
+            if (!message.member.voice.channel) return message.reply('يجب أن تكون في روم صوتي');
+            player.stop(message.guild);
+            message.reply('تم إيقاف التشغيل');
+            break;
+
+        case 'تخطي':
+            if (!message.member.voice.channel) return message.reply('يجب أن تكون في روم صوتي');
+            player.skip(message.guild);
+            message.reply('تم تخطي الأغنية الحالية');
+            break;
+
+        case 'مساعدة':
+            message.reply(`
+أوامر البوت:
+!شغل [رابط يوتيوب] - لتشغيل أغنية
+!ايقاف - لإيقاف التشغيل
+!تخطي - لتخطي الأغنية الحالية
+!مساعدة - لعرض قائمة الأوامر
+            `);
+            break;
+    }
+});
+
+client.login(process.env.TOKEN); 
